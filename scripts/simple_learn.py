@@ -128,27 +128,27 @@ class MotionGenerator(object):
 
         return list_to_iterate, msg_list
 
-    def generatePlayMotion(self, acceleration=1.0): # TODO: allow accelerate the motion
+    def generatePlayMotion(self, motion_name="last_learnt_motion", play_speed=1.0):
         # Add the final generated traj as a play motion movement to re-do it if
         # we want
         play_motion_dict = {}
         play_motion_dict['joints'] = self.motion_joints
         play_motion_dict['meta'] = {
-            'description': 'last_learnt_motion',
-            'name': 'last_learnt_motion',
+            'description': motion_name,
+            'name': motion_name,
             'usage': 'demo'}
         play_motion_dict['points'] = []
         total_positions = len(self.motion_traj)
-        timestep = (self.motion_duration / acceleration) / total_positions
+        timestep = (self.motion_duration / play_speed) / total_positions
         for idx, positions in enumerate(self.motion_traj):
             play_motion_dict['points'].append({'positions': positions,
                                                'time_from_start': float(idx) * timestep})
 
         rospy.loginfo("Motion looks like:\n" + str(play_motion_dict))
         rospy.loginfo(
-            "Setting last_learnt_motion as a new play motion movement")
+            "Setting " + motion_name + " as a new play motion movement")
         rospy.set_param(
-            "/play_motion/motions/last_learnt_motion", play_motion_dict)
+            "/play_motion/motions/" + motion_name , play_motion_dict)
 
         # self.say_pub.publish(String("Ok, here we go!"))
         # rospy.sleep(1.5) # Sleeping so the param server can update on time
@@ -182,4 +182,7 @@ if __name__ == '__main__':
     joints = ['head_1_joint', 'head_2_joint']
     mg = MotionGenerator(bag_name, joints)
 
-    mg.generatePlayMotion(acceleration=3.0)
+    mg.generatePlayMotion("LBD 0.5X", play_speed=0.5)
+    mg.generatePlayMotion("LBD 1X", play_speed=1.0)
+    mg.generatePlayMotion("LBD 2X", play_speed=2.0)
+    mg.generatePlayMotion("LBD 3X", play_speed=3.0)
