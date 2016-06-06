@@ -150,6 +150,8 @@ class MotionGenerator(object):
         rospy.set_param(
             "/play_motion/motions/" + motion_name , play_motion_dict)
 
+        return play_motion_dict
+
         # self.say_pub.publish(String("Ok, here we go!"))
         # rospy.sleep(1.5) # Sleeping so the param server can update on time
 
