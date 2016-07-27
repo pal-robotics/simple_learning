@@ -1,0 +1,4 @@
+<launch>
+    <!-- Node that records joint states for learning -->
+    <node pkg="simple_learning" name="learning_server" type="learn_server.py" output="screen"/>
+</launch>
