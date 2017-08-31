@@ -1,3 +1,6 @@
-string[] joints_to_learn
+string[] joints_to_learn            # List of joints to include in the motion
+bool record_single_waypoint         # If true individual waypoints will be recorded upon user's command. Otherwise continuous 
+                                    # mode will be used where joint_states status is recorded constantly
+float32 seconds_for_each_waypoint   # number of seconds given to reach each waypoint when recording individual waypoints
 ---
 string motion
