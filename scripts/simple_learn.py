@@ -2,8 +2,8 @@
 """
 Created on 27/04/16
 
-@author: Sammy Pfeiffer
-@email: sam.pfeiffer@pal-robotics.com
+@author: Sammy Pfeiffer, Jordi Pages
+@email: {sam.pfeiffer, jordi.pages}@pal-robotics.com
 
 """
 
@@ -20,6 +20,8 @@ class JointStateRecorder(object):
         self.joint_states_topic = joint_state_topic
         # Creating a subscriber to joint states
         self.start_recording = False
+        self.record_only_one = False
+        self.single_waypoint_recorded = False
         self.joint_states_subs = rospy.Subscriber(
             self.joint_states_topic, JointState, self.joint_states_cb)
         rospy.loginfo("Subscribed to: " + self.joint_states_subs.resolved_name)
@@ -27,16 +29,28 @@ class JointStateRecorder(object):
         self.joint_states_accumulator = []
 
     def joint_states_cb(self, data):
-        """joint_states topic cb"""
-        rospy.logdebug("Received joint_states:\n " + str(data))
+        """joint_states topic cb"""        
         if self.start_recording:
+            rospy.logdebug("Received joint_states:\n " + str(data))
             self.joint_states_accumulator.append(data)
+            if self.record_only_one:
+                self.start_recording = False
+                self.single_waypoint_recorded = True
 
-    def start(self, bag_name, joints=[]):
+    def start(self, bag_name, single_waypoint, joints=[]):
         """Start the learning writting in the accumulator of msgs"""
-        rospy.loginfo("Starting to record.")
+        if single_waypoint:
+            rospy.loginfo("Starting to record a single waypoint")
+        else:
+            rospy.loginfo("Starting to record in continuous mode")
         self.current_rosbag_name = bag_name
-        self.start_recording = True
+        self.record_only_one = single_waypoint
+        self.single_waypoint_recorded = False
+        self.start_recording = True        
+        if single_waypoint:   # wait until a single joint_states message is recorded
+            while not self.single_waypoint_recorded:
+                rospy.sleep(0.1)
+
 
     def stop(self):
         """Stop the learning writting the bag into disk"""
@@ -46,6 +60,7 @@ class JointStateRecorder(object):
         self.current_rosbag = rosbag.Bag(
             self.current_rosbag_name + '.bag', 'w')
         for js_msg in self.joint_states_accumulator:
+            rospy.logdebug("Recording waypoint")
             self.current_rosbag.write(
                 self.joint_states_topic, js_msg, t=js_msg.header.stamp)
         self.current_rosbag.close()
@@ -57,12 +72,13 @@ class JointStateRecorder(object):
 
 class MotionGenerator(object):
 
-    def __init__(self, bagname, joints, frequency_to_downsample=15,
+    def __init__(self, bagname, joints, individual_waypoints_recorded, seconds_for_each_waypoint, frequency_to_downsample,
                  ignore_last_num_seconds=0.0, js_topic='/joint_states'):
         """Load gesture from the bag name given and remove jerkiness by downsampling"""
         # get bag info
         self.info_bag = yaml.load(subprocess.Popen(['rosbag', 'info', '--yaml', bagname],
                                                    stdout=subprocess.PIPE).communicate()[0])
+
 
         # Fill up traj with real trajectory points
         traj = []
@@ -73,12 +89,19 @@ class MotionGenerator(object):
         num_msgs = 0
         num_downsampled_data_points = 0
         for topic, msg, t in bag.read_messages(topics=[js_topic]):
+            rospy.logdebug("Processing new message from rosbag")
             num_msgs += 1
             # Process interesting joints here
             names, positions = self.getNamesAndMsgList(joints, msg)
-            if num_msgs % frequency_to_downsample == 0:
+            if individual_waypoints_recorded:
+                # Take all waypoints
                 num_downsampled_data_points += 1
                 downsampled_traj.append(positions)
+            else:
+                # Downsample the number of points if recorded using continuous mode
+                if num_msgs % frequency_to_downsample == 0:
+                    num_downsampled_data_points += 1
+                    downsampled_traj.append(positions)
             # Append interesting joints here
             traj.append(positions)
             if first_point:
@@ -95,13 +118,16 @@ class MotionGenerator(object):
 
         rospy.loginfo("Joints:" + str(joints))
         rospy.loginfo("Initial pose:" + str(self.gesture_x0))
-        rospy.loginfo("Final pose: " + str(self.gesture_goal))
-        time_ = self.info_bag['duration']
-        rospy.loginfo("Time: " + str(time_))
+        rospy.loginfo("Final pose: " + str(self.gesture_goal))        
 
         self.motion_joints = joints
         self.motion_traj = downsampled_traj
-        self.motion_duration = time_
+        if individual_waypoints_recorded:
+            self.motion_duration = num_downsampled_data_points * seconds_for_each_waypoint
+        else:
+            self.motion_duration = self.info_bag['duration']
+        rospy.loginfo("Motion duration: " + str(self.motion_duration))
+
 
         # TODO: do play motion of it directly
 
@@ -139,6 +165,7 @@ class MotionGenerator(object):
             'usage': 'demo'}
         play_motion_dict['points'] = []
         total_positions = len(self.motion_traj)
+        rospy.loginfo("Number of positions in motion: " + str(total_positions) + "\n")
         timestep = (self.motion_duration / play_speed) / total_positions
         for idx, positions in enumerate(self.motion_traj):
             play_motion_dict['points'].append({'positions': positions,
@@ -151,21 +178,6 @@ class MotionGenerator(object):
             "/play_motion/motions/" + motion_name , play_motion_dict)
 
         return play_motion_dict
-
-        # self.say_pub.publish(String("Ok, here we go!"))
-        # rospy.sleep(1.5) # Sleeping so the param server can update on time
-
-        # pmg = PlayMotionGoal()
-        # pmg.motion_name = "last_learnt_motion"
-        # pmg.skip_planning = False
-        # init_time = time.time()
-        # rospy.loginfo("Going to the initial position")
-        # self.ac_play_motion.send_goal_and_wait(pmg)
-        # rospy.loginfo("It took " + str(time.time() - init_time ) + "s executing last learn motion.")
-        # res = self.ac_play_motion.get_result()
-        # rospy.loginfo("Result was: " + str(res))
-        # if res.error_code != 1:
-        #     rospy.logerr("There was some problem executing last learn motion")
 
 
 class Executor(object):
