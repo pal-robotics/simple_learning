@@ -2,8 +2,8 @@
 Changelog for package simple_learning
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.0.2 (2020-07-06)
+------------------
 * Merge pull request #1 from pal-robotics/add-waypoints-mode
   add waypoint recording mode
 * add waypoint mode
